@@ -1,0 +1,8 @@
+# local package
+
+# external requirements
+
+
+beautifulsoup4==4.7.1
+requests==2.21.0
+pandas==0.24.1

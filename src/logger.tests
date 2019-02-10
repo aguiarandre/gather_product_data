@@ -1,0 +1,8 @@
+2019-02-10 01:25:27 : WARNING - Kabum - _extract_info: As you're using the URL to access the product, i'm inputting the Product Id
+2019-02-10 01:25:27 : INFO - Kabum - update_info: Product information updated at 20190210.
+2019-02-10 01:25:27 : INFO - tests - run_tests: test_no_product_id ok
+2019-02-10 01:25:29 : INFO - Kabum - update_info: Product information updated at 20190210.
+2019-02-10 01:25:31 : INFO - Kabum - update_info: Product information updated at 20190210.
+2019-02-10 01:25:32 : INFO - Kabum - update_info: Product information updated at 20190210.
+2019-02-10 01:25:32 : INFO - tests - run_tests: test_list_of_products ok
+2019-02-10 01:25:32 : INFO - tests - run_tests: Number of errors: 0
