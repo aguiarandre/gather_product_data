@@ -1,12 +1,20 @@
 import requests
+import os
 from bs4 import BeautifulSoup
 from typing import Union, Optional, List
 import pandas
 import logging
 import datetime
 import re
+from dotenv import find_dotenv, load_dotenv
+import mysql.connector
+import matplotlib.pyplot as plt
 
-#logging.basicConfig(level=logging.INFO)
+logging.basicConfig(filename='logger.writes',
+                    filemode='a',
+                    level=logging.INFO,
+                    format='%(asctime)s : %(levelname)s - %(module)s - %(funcName)s: %(message)s',
+                    datefmt="%Y-%m-%d %H:%M:%S")
 
 class Product(object):
     '''
@@ -67,6 +75,7 @@ class KabumProduct(OnlineProduct):
         super().__init__(self, *args, **kwargs)
         self.id = product_id
         self.date = None
+        self.hours = None
         
         ## initialize product
         
@@ -110,18 +119,22 @@ class KabumProduct(OnlineProduct):
              'is_promo': [self.is_promo],
              'dbl_price': [self.price],
              'cat_prod': self.category,
-             'dt_ref': self.date}
+             'dt_ref': self.date,
+             'dt_time': self.hours}
 
         return pandas.DataFrame(data=d)    
     
     @staticmethod
     def _format_time_now() -> str:
-        today = datetime.date.today()
+        today = datetime.datetime.now()
         day = f'{today.day:02.0f}'
         month = f'{today.month:02.0f}'
         year = f'{today.year:04.0f}'
+        hour = f'{today.hour:02.0f}'
+        minute = f'{today.minute:02.0f}'
+        second = f'{today.second:02.0f}'
 
-        return year+month+day
+        return year+month+day, hour+":"+minute
     
     def _extract_info(self) -> bool:
     
@@ -168,7 +181,7 @@ class KabumProduct(OnlineProduct):
             
         
         # update time of queries
-        self.date = self._format_time_now()
+        self.date, self.hours = self._format_time_now()
                 
         # TODO: pegar quantos % de desconto no boleto
         return True
@@ -179,37 +192,131 @@ class KabumProduct(OnlineProduct):
         '''
         Docstring to be done
         '''
-        
+
         page = requests.get(self.url)
         self.soup = BeautifulSoup(page.content, 'html.parser')
 
         # this specific div-class happens when the product is under promotion
-        
+
         if self.soup.findAll("div", {"class": "box_preco-cm"}): #hack way to check if product is under promotion - this may change over time
             self.is_promo = True
 
         if(self._extract_info()):
             logging.info(f'Product information updated at {self.date}.')
+
+        return
         
+
+
+    def write_to_mysql(self):
+        '''
+        Submit results to mySQL database products.kabum 
+        (or maybe futurely to a Hadoop CDH)
+        '''
+
+        # find .env file
+        load_dotenv(find_dotenv())
+
+        # variables are now store in os.getenv
+        USERNAME = os.getenv("USERNAME")
+        PASSWD = os.getenv("PASSWD")
+
+        conn = mysql.connector.connect(
+          host="localhost",
+          user=USERNAME,
+          passwd=PASSWD
+        )
+
+
+        mycursor = conn.cursor(buffered=True, named_tuple=True)
+
+        d = {}
+        data_to_insert = f"""
+            {self.id} , 
+            "{self.name}" , 
+            {self.is_promo} ,
+            {self.price} ,
+            "{self.category}" ,
+            "{self.date}" ,
+            "{self.hours}"
+        """
+
+        query = f'''
+        INSERT INTO products.kabum 
+        VALUES ({data_to_insert});
+        '''
+        mycursor.execute(query)
+        conn.commit()
+
+        return True
     
-    def store_results():
-        pass
-    # TODO: Submit results to mySQL database (or maybe Hadoop CDH)
     
 
 # Test example:
-'''
+
+
+
 produtos = ['LOGITECH G513','CORSAIR K70 LUX RED','SSD Kingston 2.5´ 120GB'] # just for the sake of information.
-product_ids = ['96290','82068','85196']
+product_ids = ['96290','82068','85196','99937','94832','90625']
 
 df = pandas.DataFrame()
+filename = 'D:/Users/andreaguiar/Desktop/usr/data/kabum_wrapper/kabum_products.csv'
 
 for product_id in product_ids:
     product = KabumProduct(product_id)
     product.update_info()
+    if(product.write_to_mysql()):
+        logging.info(f'Data from product: {product.name} written to mysql database products.kabum.')
+    else:
+        logging.warning('Data from product: {product.name} NOT written to mysql database products.kabum.')
 
-    df_foo = product.to_dataframe()
-    df = pandas.concat([df, df_foo], ignore_index=True)
+    
+'''PLOT PRICES'''
 
-df    
-'''
+# find .env file
+load_dotenv(find_dotenv())
+
+# variables are now store in os.getenv
+USERNAME = os.getenv("USERNAME")
+PASSWD = os.getenv("PASSWD")
+
+conn = mysql.connector.connect(
+  host="localhost",
+  user=USERNAME,
+  passwd=PASSWD
+)
+mycursor = conn.cursor(buffered=True, named_tuple=True)
+
+df = pandas.read_sql('SELECT * FROM products.kabum;', con=conn)   
+
+fig = plt.figure(figsize=[15,10])
+namelist = []
+
+for id in df.pk_product_id.unique():
+    x=df.query(f'pk_product_id == {id}').dt_ref
+    y=df.query(f'pk_product_id == {id}').dbl_price
+    name = ' '.join(df.query(f'pk_product_id == {id}').product_name.iloc[0].split()[0:4])
+    if name not in namelist:
+        namelist.append(name)
+
+    plt.plot(x, y, '-o')
+
+plt.legend(namelist)
+plt.grid()
+plt.title('Kabum')
+plt.xlabel('Data')
+plt.ylabel('R$')
+fig.autofmt_xdate()
+
+
+plt.savefig('../reports/figures/prices.png', format='png', dpi=1000)
+plt.savefig('../reports/figures/prices.eps', format='eps', dpi=1000)
+
+
+
+
+
+
+
+
+
